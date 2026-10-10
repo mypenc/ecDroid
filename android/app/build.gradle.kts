@@ -7,13 +7,8 @@ val repoRoot = rootDir.parentFile
 val workspaceVersion: String =
     Regex("""(?m)^version\s*=\s*"([^"]+)"""").find(File(repoRoot, "Cargo.toml").readText())?.groupValues?.get(1) ?: "0.0.0"
 
-// The launcher icon comes from the repository's own icon set, so it isn't duplicated here.
-val generatedRes = layout.buildDirectory.dir("generated/ec-launcher-res")
-val copyIcon by tasks.registering(Copy::class) {
-    from(File(repoRoot, "assets/app-icon/hicolor/512x512/apps/ai.storyteller.effectcraft.png"))
-    rename { "ic_launcher.png" }
-    into(generatedRes.map { it.dir("mipmap-xxxhdpi") })
-}
+// The launcher icon is copied from the repository icon set into src/main/res/mipmap-xxxhdpi by
+// android/scripts/build.sh (git-ignored), so Gradle needs no custom task for it.
 
 android {
     namespace = "ai.storyteller.effectcraft"
@@ -29,8 +24,6 @@ android {
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
-    sourceSets["main"].res.srcDir(files(generatedRes).builtBy(copyIcon))
-
     buildTypes {
         release {
             isMinifyEnabled = false // Kotlin side is tiny; JNI entry points must keep their names
@@ -44,11 +37,6 @@ android {
     packaging { jniLibs.useLegacyPackaging = false }
 }
 
-// Anything that reads the generated icon folder must wait for the copy (Gradle 9 validates this).
-tasks.matching {
-    (it.name.startsWith("merge") && it.name.endsWith("Resources")) ||
-        (it.name.startsWith("map") && it.name.endsWith("SourceSetPaths"))
-}.configureEach { dependsOn(copyIcon) }
 
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
