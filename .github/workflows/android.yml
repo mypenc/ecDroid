@@ -2,9 +2,19 @@ name: Android release
 
 on:
   push:
+    branches:
+      - "**"
     tags:
       - "v*"
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   workflow_dispatch:
+
+# A newer push cancels the older run on the same branch.
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -43,7 +53,7 @@ jobs:
           cache-all-crates: true
           # Save the cache even if a later step (e.g. Gradle) fails, so Rust is never rebuilt for nothing.
           cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.event_name != 'pull_request' }}
 
       # Prebuilt binary: avoids compiling cargo-ndk from source on every run.
       - name: Install cargo-ndk
@@ -63,7 +73,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
 
       # Step 1: Rust only. Finishes (and its cache is saved) independently of Gradle.
       - name: Build Rust library (arm64-v8a)
@@ -77,13 +87,36 @@ jobs:
         run: |
           if [ -x ./gradlew ]; then ./gradlew assembleRelease; else gradle assembleRelease; fi
 
-      - name: Locate APK
+      # Release APKs from Gradle are unsigned and Android refuses to install them
+      # ("package appears to be invalid"). Align + sign with apksigner.
+      - name: Align and sign APK
         id: apk
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          APK=$(find android/app/build/outputs/apk -name '*.apk' | grep -i release | head -n1)
-          echo "path=$APK" >> "$GITHUB_OUTPUT"
-          ls -lh "$APK"
-          unzip -l "$APK" | grep '\.so'
+          set -euo pipefail
+          BT="$ANDROID_SDK_ROOT/build-tools/35.0.0"
+          UNSIGNED=$(find android/app/build/outputs/apk/release -name '*.apk' | head -n1)
+          echo "Unsigned APK: $UNSIGNED"
+          if [ -n "${KS_B64:-}" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          else
+            echo "::warning::No keystore secrets set; signing with a throwaway key. Each build gets a different signature, so uninstall the old app before installing a new build."
+            KS_PASS=android; KS_ALIAS=effectcraft
+            keytool -genkeypair -keystore "$RUNNER_TEMP/release.jks" -alias "$KS_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$KS_PASS" -keypass "$KS_PASS" -dname "CN=EffectCraft"
+          fi
+          "$BT/zipalign" -f -p 4 "$UNSIGNED" "$RUNNER_TEMP/aligned.apk"
+          OUT=android/app/build/outputs/apk/release/effectcraft-arm64-signed.apk
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-key-alias "$KS_ALIAS" \
+            --ks-pass "pass:$KS_PASS" --out "$OUT" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" verify --verbose "$OUT"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+          ls -lh "$OUT"
+          unzip -l "$OUT" | grep '\.so'
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
