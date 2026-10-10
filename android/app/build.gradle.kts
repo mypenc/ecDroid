@@ -8,7 +8,7 @@ val workspaceVersion: String =
     Regex("""(?m)^version\s*=\s*"([^"]+)"""").find(File(repoRoot, "Cargo.toml").readText())?.groupValues?.get(1) ?: "0.0.0"
 
 // The launcher icon comes from the repository's own icon set, so it isn't duplicated here.
-val generatedRes = layout.buildDirectory.dir("generated/res")
+val generatedRes = layout.buildDirectory.dir("generated/ec-launcher-res")
 val copyIcon by tasks.registering(Copy::class) {
     from(File(repoRoot, "assets/app-icon/hicolor/512x512/apps/ai.storyteller.effectcraft.png"))
     rename { "ic_launcher.png" }
@@ -44,12 +44,10 @@ android {
     packaging { jniLibs.useLegacyPackaging = false }
 }
 
-// Anything that reads the generated resource folder must wait for the icon copy (Gradle 9 validates this).
+// Anything that reads the generated icon folder must wait for the copy (Gradle 9 validates this).
 tasks.matching {
     (it.name.startsWith("merge") && it.name.endsWith("Resources")) ||
-        (it.name.startsWith("map") && it.name.endsWith("SourceSetPaths")) ||
-        (it.name.startsWith("generate") && it.name.endsWith("Resources")) ||
-        it.name.contains("ArtProfile") || it.name.contains("LintVital")
+        (it.name.startsWith("map") && it.name.endsWith("SourceSetPaths"))
 }.configureEach { dependsOn(copyIcon) }
 
 dependencies {
