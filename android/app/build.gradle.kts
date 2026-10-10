@@ -29,7 +29,7 @@ android {
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
-    sourceSets["main"].res.srcDir(generatedRes)
+    sourceSets["main"].res.srcDir(files(generatedRes).builtBy(copyIcon))
 
     buildTypes {
         release {
@@ -44,7 +44,13 @@ android {
     packaging { jniLibs.useLegacyPackaging = false }
 }
 
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Resources") }.configureEach { dependsOn(copyIcon) }
+// Anything that reads the generated resource folder must wait for the icon copy (Gradle 9 validates this).
+tasks.matching {
+    (it.name.startsWith("merge") && it.name.endsWith("Resources")) ||
+        (it.name.startsWith("map") && it.name.endsWith("SourceSetPaths")) ||
+        (it.name.startsWith("generate") && it.name.endsWith("Resources")) ||
+        it.name.contains("ArtProfile") || it.name.contains("LintVital")
+}.configureEach { dependsOn(copyIcon) }
 
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
