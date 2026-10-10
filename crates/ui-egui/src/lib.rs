@@ -1557,6 +1557,26 @@ impl EffectcraftApp {
     pub fn take_synthetic_input(&mut self) -> Vec<egui::Event> {
         std::mem::take(&mut self.synthetic)
     }
+
+    /// Touch layer upkeep: touch-sized metrics, the modifier bar, and the actions it queued.
+    fn touch_frame(&mut self, ctx: &egui::Context) {
+        self.touch.apply_style(ctx);
+        self.touch.show_bar(ctx);
+        for a in self.touch.take_actions() {
+            let id = match a {
+                touch::Action::Undo => "edit.undo",
+                touch::Action::Redo => "edit.redo",
+            };
+            if let Err(e) = self.session.execute(id, json!({})) {
+                log::debug!("{id}: {e}");
+            }
+        }
+        if self.touch.take_haptic()
+            && let Some(h) = &self.hooks.haptic
+        {
+            h();
+        }
+    }
 }
 
 impl eframe::App for EffectcraftApp {
@@ -1616,26 +1636,6 @@ impl eframe::App for EffectcraftApp {
         }
         self.issue_screenshots(ctx);
         self.collect_screenshots(ctx);
-    }
-
-    /// Touch layer upkeep: touch-sized metrics, the modifier bar, and the actions it queued.
-    fn touch_frame(&mut self, ctx: &egui::Context) {
-        self.touch.apply_style(ctx);
-        self.touch.show_bar(ctx);
-        for a in self.touch.take_actions() {
-            let id = match a {
-                touch::Action::Undo => "edit.undo",
-                touch::Action::Redo => "edit.redo",
-            };
-            if let Err(e) = self.session.execute(id, json!({})) {
-                log::debug!("{id}: {e}");
-            }
-        }
-        if self.touch.take_haptic()
-            && let Some(h) = &self.hooks.haptic
-        {
-            h();
-        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {

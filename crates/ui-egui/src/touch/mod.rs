@@ -136,7 +136,6 @@ impl Touch {
             // Sticky modifiers apply to everything this frame carries.
             let m = self.mods();
             if self.any_sticky() {
-                raw.modifiers = or_mods(raw.modifiers, m);
                 for e in &mut raw.events {
                     match e {
                         Event::PointerButton { modifiers, .. } | Event::MouseWheel { modifiers, .. } | Event::Key { modifiers, .. } => {
