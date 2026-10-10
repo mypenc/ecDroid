@@ -9,6 +9,11 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  NDK_VERSION: "26.3.11579264"
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -30,19 +35,33 @@ jobs:
           toolchain: "1.95"
           targets: aarch64-linux-android
 
-      - name: Cache cargo
+      # Caches ~/.cargo registry + git and the target/ dir (compiled dependencies).
+      - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
+        with:
+          key: android-arm64-${{ hashFiles('android/scripts/vendor-winit.sh', 'android/patches/*.patch') }}
+          cache-all-crates: true
+          save-if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
 
+      # Prebuilt binary: avoids compiling cargo-ndk from source on every run.
       - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
 
       - name: Set up Android SDK and NDK
         uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools platforms;android-34 build-tools;34.0.0 ndk;26.3.11579264"
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0 ndk;${{ env.NDK_VERSION }}"
 
       - name: Export NDK path
-        run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.3.11579264" >> "$GITHUB_ENV"
+        run: echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      # Caches Gradle downloads and the wrapper distribution.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
       - name: Build release APK (arm64-v8a)
         run: |
@@ -54,6 +73,8 @@ jobs:
         run: |
           APK=$(find android/app/build/outputs/apk -name '*.apk' | grep -i release | head -n1)
           echo "path=$APK" >> "$GITHUB_OUTPUT"
+          ls -lh "$APK"
+          unzip -l "$APK" | grep '\.so'
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
