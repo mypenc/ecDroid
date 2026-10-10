@@ -23,7 +23,7 @@ done
 cd "$root"
 targets=(); for a in "${abis[@]}"; do targets+=(-t "$a"); done
 # The winit patch applies to this build only: desktop builds keep using crates.io's winit.
-cargo ndk "${targets[@]}" -o "$here/app/src/main/jniLibs" build -p effectcraft-android $profile \
+cargo ndk --platform 29 "${targets[@]}" -o "$here/app/src/main/jniLibs" build -p effectcraft-android $profile \
   --config "patch.crates-io.winit.path=\"$here/vendor/winit\""
 
 if [ "$apk" = 1 ]; then
