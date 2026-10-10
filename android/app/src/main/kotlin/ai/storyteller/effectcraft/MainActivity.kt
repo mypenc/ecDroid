@@ -50,7 +50,13 @@ class MainActivity : GameActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
         exports = Exports(applicationContext)
+        DebugLog.install(this)
         handleViewIntent(intent)
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) DebugLog.markClean(this)
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
