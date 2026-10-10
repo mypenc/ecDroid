@@ -34,6 +34,14 @@ use serde_json::json;
 /// Entry point: android-activity calls this on its own thread, not the Java UI thread.
 #[unsafe(no_mangle)]
 fn android_main(app: AndroidApp) {
+    // Make startup logs visible in `adb logcat` (stderr goes to the tag RustStdoutStderr); the
+    // logger only prints to stderr when RUST_LOG is set. An explicit RUST_LOG wins.
+    if std::env::var_os("RUST_LOG").is_none() {
+        // SAFETY: first statement of `android_main`, before this app spawns any thread of its own.
+        unsafe {
+            std::env::set_var("RUST_LOG", "warn,effectcraft=debug,eframe=info,egui_wgpu=info,wgpu_hal=info,wgpu_core=warn,winit=info,android_activity=info");
+        }
+    }
     effectcraft_engine::logging::install();
     effectcraft_engine::logging::install_panic_hook();
     prepare_environment(&app);
